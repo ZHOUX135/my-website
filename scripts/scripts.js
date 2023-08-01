@@ -6,6 +6,7 @@ import {
   decorateButtons,
   decorateIcons,
   decorateSections,
+  decorateBlock,
   decorateBlocks,
   decorateTemplateAndTheme,
   waitForLCP,
@@ -114,6 +115,126 @@ async function loadLazy(doc) {
   sampleRUM('lazy');
   sampleRUM.observe(main.querySelectorAll('div[data-block-name]'));
   sampleRUM.observe(main.querySelectorAll('picture > img'));
+}
+
+/* START lib-franklin overrides/extensionts */
+/**
+ * Returns a picture element with webp and fallbacks
+ * @param {string} src The image URL
+ * @param {boolean} eager load image eager
+ * @param {Array} breakpoints breakpoints and corresponding params (eg. width)
+ */
+
+function buildSrcSet(dimensions, path, format, optimize = 'medium') {
+  let srcset = '';
+  dimensions.forEach((dim, i) => {
+    if (i > 0) {
+      srcset += ', ';
+    }
+    srcset += `${path}?width=${dim.width}&format=${format}&optimize=${optimize}`;
+    if (dim.density) {
+      srcset += ` ${dim.density}`;
+    }
+  });
+  return srcset;
+}
+
+export function createOptimizedPicture(src, alt = '', eager = false, breakpoints = [{ media: '(min-width: 400px)', dimensions: [{ width: '2000' }] }, { dimensions: [{ width: '750' }] }], optimize = 'medium') {
+  const url = new URL(src, window.location.href);
+  const picture = document.createElement('picture');
+  const { pathname } = url;
+  const ext = pathname.substring(pathname.lastIndexOf('.') + 1);
+
+  // webp
+  breakpoints.forEach((br) => {
+    const { media, dimensions } = br;
+    const source = document.createElement('source');
+    if (br.media) source.setAttribute('media', media);
+    source.setAttribute('type', 'image/webp');
+    const srcset = buildSrcSet(dimensions, pathname, 'webply', optimize);
+    source.setAttribute('srcset', srcset);
+    picture.appendChild(source);
+  });
+
+  // fallback
+  breakpoints.forEach((br, i) => {
+    const { media, dimensions } = br;
+    if (i < breakpoints.length - 1) {
+      const source = document.createElement('source');
+      if (br.media) source.setAttribute('media', media);
+      const srcset = buildSrcSet(dimensions, pathname, ext, optimize);
+      source.setAttribute('srcset', srcset);
+      picture.appendChild(source);
+    } else {
+      const img = document.createElement('img');
+      img.setAttribute('loading', eager ? 'eager' : 'lazy');
+      img.setAttribute('alt', alt);
+      picture.appendChild(img);
+      img.setAttribute('src', `${pathname}?width=${dimensions[0].width}&format=${ext}&optimize=${optimize}`);
+    }
+  });
+
+  return picture;
+}
+
+/*
+ * If a block contains a link that can be an embed (optionally with image preview)
+ * then prepare the necessary block for the embed and add to the provided subblock array
+ * @param {*} elem element to investigate for embed content
+ * @returns block if embed was detected otherwise false
+ */
+
+export function processEmbed(elem) {
+  // setup embed
+  const link = elem.querySelector('a');
+
+  if (!link) {
+    return false;
+  }
+  const linkWrapper = link?.closest('div');
+  let hasImg = false;
+  const img = elem.querySelector('picture');
+  if (img) {
+    hasImg = true;
+  }
+  if (!linkWrapper || linkWrapper.children.length !== (hasImg ? 2 : 1)) {
+    return false;
+  }
+  const sourceOrImg = hasImg ? img : 'Source';
+  const linkUrl = new URL(link.href);
+  let linkTextUrl;
+  try {
+    linkTextUrl = new URL(link.textContent);
+  } catch {
+    // not a url, ignore
+  }
+  if (!linkTextUrl || linkTextUrl.pathname !== linkUrl.pathname) {
+    return false;
+  }
+  const fragmentDomains = ['localhost', 'surest.com', 'uhg-surest--hlxsites.hlx.page', 'uhg-surest--hlxsites.hlx.live'];
+  const found = fragmentDomains.find((domain) => linkUrl.hostname.endsWith(domain));
+  let block;
+  if (found) {
+    // fragment or video
+    if (linkUrl.pathname.includes('.mp4')) {
+      // video
+      block = buildBlock('video', [[sourceOrImg, link]]);
+      linkWrapper.append(block);
+      linkWrapper.classList.add('media-col');
+      decorateBlock(block);
+    } else {
+      // fragment
+      block = buildBlock('fragment', [[sourceOrImg, link]]);
+      linkWrapper.append(block);
+      decorateBlock(block);
+    }
+  } else {
+    block = buildBlock('embed', [[sourceOrImg, link]]);
+    linkWrapper.append(block);
+    linkWrapper.classList.add('media-col');
+    decorateBlock(block);
+  }
+  return block;
 }
 
 /**
