@@ -211,7 +211,7 @@ export function processEmbed(elem) {
   if (!linkTextUrl || linkTextUrl.pathname !== linkUrl.pathname) {
     return false;
   }
-  const fragmentDomains = ['localhost', 'surest.com', 'uhg-surest--hlxsites.hlx.page', 'uhg-surest--hlxsites.hlx.live'];
+  const fragmentDomains = ['localhost', 'surest.com', 'my-website--zhoux135.hlx.page', 'my-website--zhoux135.hlx.live'];
   const found = fragmentDomains.find((domain) => linkUrl.hostname.endsWith(domain));
   let block;
   if (found) {
